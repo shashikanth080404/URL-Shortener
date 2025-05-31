@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
 
 const app = express();
 const port = 4000;
@@ -8,12 +8,15 @@ const port = 4000;
 app.use(cors());
 app.use(express.json());
 
-const db = new Database('neural.db');
+let db;
 
 async function initDb() {
   try {
+    const SQL = await initSqlJs();
+    db = new SQL.Database();
+    
     // Create urls table if it doesn't exist
-    db.exec(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS urls (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         shortId TEXT UNIQUE NOT NULL,
@@ -43,13 +46,16 @@ app.post('/shorten', (req, res) => {
   const shortId = Math.random().toString(36).substring(2, 8);
 
   try {
-    const stmt = db.prepare(
-      'INSERT INTO urls (shortId, originalUrl, title, custom_url, user_id, qr) VALUES (?, ?, ?, ?, ?, ?)'
+    db.run(
+      'INSERT INTO urls (shortId, originalUrl, title, custom_url, user_id, qr) VALUES (?, ?, ?, ?, ?, ?)',
+      [shortId, originalUrl, title, customUrl, user_id, qr]
     );
-    const result = stmt.run(shortId, originalUrl, title, customUrl, user_id, qr);
 
-    const newUrl = db.prepare('SELECT * FROM urls WHERE id = ?').get(result.lastInsertRowid);
-    res.json(newUrl);
+    const stmt = db.prepare('SELECT * FROM urls WHERE shortId = ?');
+    const result = stmt.getAsObject([shortId]);
+    stmt.free();
+
+    res.json(result);
   } catch (error) {
     console.error('Error creating URL:', error);
     res.status(500).json({ error: 'Database error' });
@@ -59,12 +65,12 @@ app.post('/shorten', (req, res) => {
 app.get('/:shortId', (req, res) => {
   const { shortId } = req.params;
   try {
-    const row = db.prepare(
-      'SELECT * FROM urls WHERE shortId = ? OR custom_url = ?'
-    ).get(shortId, shortId);
+    const stmt = db.prepare('SELECT * FROM urls WHERE shortId = ? OR custom_url = ?');
+    const result = stmt.getAsObject([shortId, shortId]);
+    stmt.free();
 
-    if (row) {
-      res.redirect(row.originalUrl);
+    if (result.originalUrl) {
+      res.redirect(result.originalUrl);
     } else {
       res.status(404).send('URL not found');
     }
@@ -77,10 +83,13 @@ app.get('/:shortId', (req, res) => {
 app.get('/api/urls/:userId', (req, res) => {
   const { userId } = req.params;
   try {
-    const rows = db.prepare(
-      'SELECT * FROM urls WHERE user_id = ? ORDER BY created_at DESC'
-    ).all(userId);
-    res.json(rows);
+    const stmt = db.prepare('SELECT * FROM urls WHERE user_id = ? ORDER BY created_at DESC');
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    res.json(results);
   } catch (error) {
     console.error('Error retrieving URLs:', error);
     res.status(500).json({ error: 'Database error' });
@@ -90,7 +99,7 @@ app.get('/api/urls/:userId', (req, res) => {
 app.delete('/api/urls/:id', (req, res) => {
   const { id } = req.params;
   try {
-    db.prepare('DELETE FROM urls WHERE id = ?').run(id);
+    db.run('DELETE FROM urls WHERE id = ?', [id]);
     res.json({ message: 'URL deleted successfully' });
   } catch (error) {
     console.error('Error deleting URL:', error);
