@@ -31,18 +31,21 @@ export async function getUrl({ id, user_id }) {
 }
 
 export async function getLongUrl(id) {
-  const { data, error } = await supabase
-    .from("urls")
-    .select("id, original_url")
-    .or(`short_url.eq.${id},custom_url.eq.${id}`)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("urls")
+      .select("id, original_url")
+      .or(`short_url.eq.${id},custom_url.eq.${id}`)
+      .single();
 
-  if (error) {
-    console.error("Error fetching short link:", error);
-    throw new Error("URL not found");
+    if (error) throw error;
+    if (!data) throw new Error("URL not found");
+
+    return data;
+  } catch (error) {
+    console.error("Error fetching URL:", error);
+    throw new Error("URL not found or invalid");
   }
-
-  return data;
 }
 
 export async function createUrl({ title, longUrl, customUrl, user_id }, qrcode) {

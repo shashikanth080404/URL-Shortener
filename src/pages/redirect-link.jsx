@@ -7,22 +7,29 @@ import { BarLoader } from "react-spinners";
 
 const RedirectLink = () => {
   const { id } = useParams();
-  const { loading, data, fn } = useFetch(getLongUrl, id);
+  const { loading, error, data, fn } = useFetch(getLongUrl, id);
 
   useEffect(() => {
-    const recordClickAndRedirect = async () => {
-      try {
-        await fn();
-        if (data && data.original_url) {
+    fn();
+  }, []);
+
+  useEffect(() => {
+    const handleRedirect = async () => {
+      if (data?.id && data?.original_url) {
+        try {
           await storeClicks({ id: data.id, originalUrl: data.original_url });
-          window.location.replace(data.original_url);
+          window.location.href = data.original_url;
+        } catch (err) {
+          console.error("Error storing clicks:", err);
+          // Still redirect even if click tracking fails
+          window.location.href = data.original_url;
         }
-      } catch (error) {
-        console.error("Error during redirect:", error);
       }
     };
 
-    recordClickAndRedirect();
+    if (data) {
+      handleRedirect();
+    }
   }, [data]);
 
   if (loading) {
@@ -34,10 +41,12 @@ const RedirectLink = () => {
     );
   }
 
-  if (!data || !data.original_url) {
+  if (error || !data) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-xl">URL not found or invalid.</p>
+        <p className="text-xl text-red-400">
+          {error?.message || "URL not found or invalid."}
+        </p>
       </div>
     );
   }
