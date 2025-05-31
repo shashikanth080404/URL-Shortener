@@ -73,10 +73,20 @@ app.post('/shorten', async (req, res) => {
 app.get('/:shortId', async (req, res) => {
   const { shortId } = req.params;
   try {
-    const [rows] = await connection.execute(
+    // First try to find by shortId
+    let [rows] = await connection.execute(
       'SELECT originalUrl FROM urls WHERE shortId = ?',
       [shortId]
     );
+
+    // If not found, try to find by customUrl
+    if (rows.length === 0) {
+      [rows] = await connection.execute(
+        'SELECT u.originalUrl FROM urls u INNER JOIN custom_url_mappings c ON u.shortId = c.backend_url WHERE c.custom_url = ?',
+        [shortId]
+      );
+    }
+
     if (rows.length > 0) {
       res.redirect(rows[0].originalUrl);
     } else {
