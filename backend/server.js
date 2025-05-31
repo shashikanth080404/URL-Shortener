@@ -19,53 +19,53 @@ const dbConfig = {
 let connection;
 
 async function initDb() {
-  connection = await mysql.createConnection(dbConfig);
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS urls (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      shortId VARCHAR(10) UNIQUE NOT NULL,
-      customUrl VARCHAR(50) UNIQUE,
-      originalUrl TEXT NOT NULL
-    )
-  `);
+  try {
+    connection = await mysql.createConnection(dbConfig);
+    
+    // Create urls table if it doesn't exist
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS urls (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        shortId VARCHAR(10) UNIQUE NOT NULL,
+        originalUrl TEXT NOT NULL,
+        title VARCHAR(255),
+        qr TEXT,
+        custom_url VARCHAR(50) UNIQUE,
+        user_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-  await connection.execute(`
-    CREATE TABLE IF NOT EXISTS custom_url_mappings (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      backend_url VARCHAR(255) NOT NULL,
-      custom_url VARCHAR(50) UNIQUE NOT NULL
-    )
-  `);
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
+  }
 }
 
 app.post('/shorten', async (req, res) => {
-  const { originalUrl, customUrl } = req.body;
+  const { originalUrl, customUrl, title, user_id, qr } = req.body;
+  
   if (!originalUrl) {
     return res.status(400).json({ error: 'originalUrl is required' });
   }
+
   const shortId = Math.random().toString(36).substring(2, 8);
+
   try {
-    console.log('Received customUrl:', customUrl);
-    await connection.execute(
-      'INSERT INTO urls (shortId, originalUrl) VALUES (?, ?)',
-      [shortId, originalUrl]
+    const [result] = await connection.execute(
+      'INSERT INTO urls (shortId, originalUrl, title, custom_url, user_id, qr) VALUES (?, ?, ?, ?, ?, ?)',
+      [shortId, originalUrl, title, customUrl, user_id, qr]
     );
 
-    if (customUrl) {
-      try {
-        await connection.execute(
-          'INSERT INTO custom_url_mappings (backend_url, custom_url) VALUES (?, ?)',
-          [shortId, customUrl]
-        );
-      } catch (err) {
-        console.error('Error inserting custom URL mapping:', err);
-        return res.status(500).json({ error: 'Custom URL mapping error' });
-      }
-    }
+    const [newUrl] = await connection.execute(
+      'SELECT * FROM urls WHERE id = ?',
+      [result.insertId]
+    );
 
-    res.json({ shortId, shortUrl: `http://localhost:${port}/${customUrl || shortId}` });
+    res.json(newUrl);
   } catch (error) {
-    console.error('Error inserting URL:', error);
+    console.error('Error creating URL:', error);
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -73,28 +73,46 @@ app.post('/shorten', async (req, res) => {
 app.get('/:shortId', async (req, res) => {
   const { shortId } = req.params;
   try {
-    // First try to find by shortId
-    let [rows] = await connection.execute(
-      'SELECT originalUrl FROM urls WHERE shortId = ?',
-      [shortId]
+    const [rows] = await connection.execute(
+      'SELECT * FROM urls WHERE shortId = ? OR custom_url = ?',
+      [shortId, shortId]
     );
-
-    // If not found, try to find by customUrl
-    if (rows.length === 0) {
-      [rows] = await connection.execute(
-        'SELECT u.originalUrl FROM urls u INNER JOIN custom_url_mappings c ON u.shortId = c.backend_url WHERE c.custom_url = ?',
-        [shortId]
-      );
-    }
 
     if (rows.length > 0) {
       res.redirect(rows[0].originalUrl);
     } else {
-      res.status(404).send('Short URL not found');
+      res.status(404).send('URL not found');
     }
   } catch (error) {
-    console.error('Error querying URL:', error);
-    res.status(500).send('Database error');
+    console.error('Error retrieving URL:', error);
+    res.status(500).send('Server error');
+  }
+});
+
+// Get all URLs for a user
+app.get('/api/urls/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const [rows] = await connection.execute(
+      'SELECT * FROM urls WHERE user_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Error retrieving URLs:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Delete a URL
+app.delete('/api/urls/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await connection.execute('DELETE FROM urls WHERE id = ?', [id]);
+    res.json({ message: 'URL deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting URL:', error);
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
