@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import mysql from 'mysql2/promise';
+import Database from 'better-sqlite3';
 
 const app = express();
 const port = 4000;
@@ -8,30 +8,20 @@ const port = 4000;
 app.use(cors());
 app.use(express.json());
 
-const dbConfig = {
-  host: 'localhost',
-  port: 3306,
-  user: 'root',
-  password: 'admin',
-  database: 'neural',
-};
-
-let connection;
+const db = new Database('neural.db');
 
 async function initDb() {
   try {
-    connection = await mysql.createConnection(dbConfig);
-    
     // Create urls table if it doesn't exist
-    await connection.execute(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS urls (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        shortId VARCHAR(10) UNIQUE NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shortId TEXT UNIQUE NOT NULL,
         originalUrl TEXT NOT NULL,
-        title VARCHAR(255),
+        title TEXT,
         qr TEXT,
-        custom_url VARCHAR(50) UNIQUE,
-        user_id VARCHAR(255),
+        custom_url TEXT UNIQUE,
+        user_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -43,7 +33,7 @@ async function initDb() {
   }
 }
 
-app.post('/shorten', async (req, res) => {
+app.post('/shorten', (req, res) => {
   const { originalUrl, customUrl, title, user_id, qr } = req.body;
   
   if (!originalUrl) {
@@ -53,16 +43,12 @@ app.post('/shorten', async (req, res) => {
   const shortId = Math.random().toString(36).substring(2, 8);
 
   try {
-    const [result] = await connection.execute(
-      'INSERT INTO urls (shortId, originalUrl, title, custom_url, user_id, qr) VALUES (?, ?, ?, ?, ?, ?)',
-      [shortId, originalUrl, title, customUrl, user_id, qr]
+    const stmt = db.prepare(
+      'INSERT INTO urls (shortId, originalUrl, title, custom_url, user_id, qr) VALUES (?, ?, ?, ?, ?, ?)'
     );
+    const result = stmt.run(shortId, originalUrl, title, customUrl, user_id, qr);
 
-    const [newUrl] = await connection.execute(
-      'SELECT * FROM urls WHERE id = ?',
-      [result.insertId]
-    );
-
+    const newUrl = db.prepare('SELECT * FROM urls WHERE id = ?').get(result.lastInsertRowid);
     res.json(newUrl);
   } catch (error) {
     console.error('Error creating URL:', error);
@@ -70,16 +56,15 @@ app.post('/shorten', async (req, res) => {
   }
 });
 
-app.get('/:shortId', async (req, res) => {
+app.get('/:shortId', (req, res) => {
   const { shortId } = req.params;
   try {
-    const [rows] = await connection.execute(
-      'SELECT * FROM urls WHERE shortId = ? OR custom_url = ?',
-      [shortId, shortId]
-    );
+    const row = db.prepare(
+      'SELECT * FROM urls WHERE shortId = ? OR custom_url = ?'
+    ).get(shortId, shortId);
 
-    if (rows.length > 0) {
-      res.redirect(rows[0].originalUrl);
+    if (row) {
+      res.redirect(row.originalUrl);
     } else {
       res.status(404).send('URL not found');
     }
@@ -89,14 +74,12 @@ app.get('/:shortId', async (req, res) => {
   }
 });
 
-// Get all URLs for a user
-app.get('/api/urls/:userId', async (req, res) => {
+app.get('/api/urls/:userId', (req, res) => {
   const { userId } = req.params;
   try {
-    const [rows] = await connection.execute(
-      'SELECT * FROM urls WHERE user_id = ? ORDER BY created_at DESC',
-      [userId]
-    );
+    const rows = db.prepare(
+      'SELECT * FROM urls WHERE user_id = ? ORDER BY created_at DESC'
+    ).all(userId);
     res.json(rows);
   } catch (error) {
     console.error('Error retrieving URLs:', error);
@@ -104,11 +87,10 @@ app.get('/api/urls/:userId', async (req, res) => {
   }
 });
 
-// Delete a URL
-app.delete('/api/urls/:id', async (req, res) => {
+app.delete('/api/urls/:id', (req, res) => {
   const { id } = req.params;
   try {
-    await connection.execute('DELETE FROM urls WHERE id = ?', [id]);
+    db.prepare('DELETE FROM urls WHERE id = ?').run(id);
     res.json({ message: 'URL deleted successfully' });
   } catch (error) {
     console.error('Error deleting URL:', error);
