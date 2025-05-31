@@ -36,6 +36,11 @@ async function initDb() {
   }
 }
 
+// Add root route handler
+app.get('/', (req, res) => {
+  res.json({ message: 'URL Shortener API is running' });
+});
+
 app.post('/shorten', (req, res) => {
   const { originalUrl, customUrl, title, user_id, qr } = req.body;
   
