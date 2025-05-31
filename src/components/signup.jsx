@@ -16,7 +16,7 @@ import {signup} from "@/db/apiAuth";
 import {BeatLoader} from "react-spinners";
 import useFetch from "@/hooks/use-fetch";
 
-const Signup = () => {
+const Signup = ({ onTabChange }) => {
   let [searchParams] = useSearchParams();
   const longLink = searchParams.get("createNew");
 
@@ -77,6 +77,8 @@ const Signup = () => {
     }
   };
 
+  const isUserExistsError = error?.message === "User already registered";
+
   return (
     <Card>
       <CardHeader>
@@ -84,7 +86,18 @@ const Signup = () => {
         <CardDescription>
           Create a new account if you haven&rsquo;t already
         </CardDescription>
-        {error && <Error message={error?.message} />}
+        {error && !isUserExistsError && <Error message={error?.message} />}
+        {isUserExistsError && (
+          <div className="text-sm text-red-500">
+            This email is already registered.{" "}
+            <button
+              onClick={() => onTabChange("login")}
+              className="text-blue-500 hover:underline"
+            >
+              Click here to login instead
+            </button>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="space-y-1">
