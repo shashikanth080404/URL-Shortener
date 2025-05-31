@@ -16,20 +16,15 @@ const LinkPage = () => {
     const imageUrl = url?.qr;
     const fileName = url?.title;
 
-    // Create an anchor element
     const anchor = document.createElement("a");
     anchor.href = imageUrl;
     anchor.download = fileName;
 
-    // Append the anchor to the body
     document.body.appendChild(anchor);
-
-    // Trigger the download by simulating a click event
     anchor.click();
-
-    // Remove the anchor from the document
     document.body.removeChild(anchor);
   };
+  
   const navigate = useNavigate();
   const {user} = UrlState();
   const {id} = useParams();
@@ -65,6 +60,8 @@ const LinkPage = () => {
     link = url?.custom_url ? url?.custom_url : url.short_url;
   }
 
+  const shortUrl = `http://localhost:4000/${link}`;
+
   return (
     <>
       {(loading || loadingStats) && (
@@ -76,11 +73,11 @@ const LinkPage = () => {
             {url?.title}
           </span>
           <a
-            href={`https://neural.in/${link}`}
+            href={shortUrl}
             target="_blank"
             className="text-3xl sm:text-4xl text-blue-400 font-bold hover:underline cursor-pointer"
           >
-            https://neural.in/{link}
+            {shortUrl}
           </a>
           <a
             href={url?.original_url}
@@ -96,9 +93,7 @@ const LinkPage = () => {
           <div className="flex gap-2">
             <Button
               variant="ghost"
-              onClick={() =>
-                navigator.clipboard.writeText(`https://neural.in/${link}`)
-              }
+              onClick={() => navigator.clipboard.writeText(shortUrl)}
             >
               <Copy />
             </Button>
