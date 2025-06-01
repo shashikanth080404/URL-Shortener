@@ -12,6 +12,18 @@ export async function login({email, password}) {
 }
 
 export async function signup({name, email, password, profile_pic}) {
+  // Create profile_pic bucket if it doesn't exist
+  const { error: bucketError } = await supabase.storage.createBucket('profile_pic', {
+    public: true,
+    fileSizeLimit: 1024 * 1024 * 2, // 2MB
+    allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif']
+  });
+
+  // Ignore error if bucket already exists
+  if (bucketError && bucketError.message !== 'Bucket already exists') {
+    throw new Error(bucketError.message);
+  }
+
   const fileName = `dp-${name.split(" ").join("-")}-${Math.random()}`;
 
   const {error: storageError} = await supabase.storage
@@ -39,8 +51,6 @@ export async function signup({name, email, password, profile_pic}) {
 export async function getCurrentUser() {
   const {data: session, error} = await supabase.auth.getSession();
   if (!session.session) return null;
-
-  // const {data, error} = await supabase.auth.getUser();
 
   if (error) throw new Error(error.message);
   return session.session?.user;
