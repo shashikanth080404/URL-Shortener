@@ -51,17 +51,6 @@ app.post('/shorten', (req, res) => {
   const shortId = Math.random().toString(36).substring(2, 8);
 
   try {
-    // Check if custom URL already exists
-    if (customUrl) {
-      const stmt = db.prepare('SELECT id FROM urls WHERE custom_url = ?');
-      const exists = stmt.step();
-      stmt.free();
-      
-      if (exists) {
-        return res.status(400).json({ error: 'Custom URL already taken' });
-      }
-    }
-
     db.run(
       'INSERT INTO urls (shortId, originalUrl, title, custom_url, user_id, qr) VALUES (?, ?, ?, ?, ?, ?)',
       [shortId, originalUrl, title, customUrl, user_id, qr]

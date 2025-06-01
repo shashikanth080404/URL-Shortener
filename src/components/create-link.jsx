@@ -13,12 +13,15 @@ import {useNavigate, useSearchParams} from "react-router-dom";
 import {useEffect, useRef, useState} from "react";
 import Error from "./error";
 import * as yup from "yup";
+import useFetch from "@/hooks/use-fetch";
+import {createUrl} from "@/db/apiUrls";
 import {BeatLoader} from "react-spinners";
 import {UrlState} from "@/context";
 import {QRCode} from "react-qrcode-logo";
 
 export function CreateLink() {
   const {user} = UrlState();
+
   const navigate = useNavigate();
   const ref = useRef();
 
@@ -26,7 +29,6 @@ export function CreateLink() {
   const longLink = searchParams.get("createNew");
 
   const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
   const [formValues, setFormValues] = useState({
     title: "",
     longUrl: longLink ? longLink : "",
@@ -49,51 +51,37 @@ export function CreateLink() {
     });
   };
 
+  const {
+    loading,
+    error,
+    data,
+    fn: fnCreateUrl,
+  } = useFetch(createUrl, {...formValues, user_id: user.id});
+
+  useEffect(() => {
+    if (error === null && data) {
+      navigate(`/link/${data[0].id}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error, data]);
+
   const createNewLink = async () => {
-    setErrors({});
+    setErrors([]);
     try {
       await schema.validate(formValues, {abortEarly: false});
 
       const canvas = ref.current.canvasRef.current;
       const blob = await new Promise((resolve) => canvas.toBlob(resolve));
 
-      setLoading(true);
-
-      const response = await fetch('http://localhost:4000/shorten', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: formValues.title,
-          originalUrl: formValues.longUrl,
-          customUrl: formValues.customUrl,
-          user_id: user.id,
-          qr: URL.createObjectURL(blob)
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create short URL');
-      }
-
-      navigate(`/link/${data.id}`);
+      await fnCreateUrl(blob);
     } catch (e) {
       const newErrors = {};
 
-      if (e?.inner) {
-        e.inner.forEach((err) => {
-          newErrors[err.path] = err.message;
-        });
-      } else {
-        newErrors.api = e.message;
-      }
+      e?.inner?.forEach((err) => {
+        newErrors[err.path] = err.message;
+      });
 
       setErrors(newErrors);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -138,7 +126,7 @@ export function CreateLink() {
             onChange={handleChange}
           />
         </div>
-        {errors.api && <Error message={errors.api} />}
+        {error && <Error message={errors.message} />}
         <DialogFooter className="sm:justify-start">
           <Button
             type="button"

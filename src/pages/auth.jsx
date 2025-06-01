@@ -2,7 +2,7 @@ import Login from "@/components/login";
 import Signup from "@/components/signup";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {UrlState} from "@/context";
-import {useEffect, useState} from "react";
+import {useEffect} from "react";
 import {useNavigate, useSearchParams} from "react-router-dom";
 
 function Auth() {
@@ -10,7 +10,6 @@ function Auth() {
   const navigate = useNavigate();
   const {isAuthenticated, loading} = UrlState();
   const longLink = searchParams.get("createNew");
-  const [activeTab, setActiveTab] = useState("login");
 
   useEffect(() => {
     if (isAuthenticated && !loading)
@@ -24,7 +23,7 @@ function Auth() {
           ? "Hold up! Let's login first.."
           : "Login / Signup"}
       </h1>
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-[400px]">
+      <Tabs defaultValue="login" className="w-[400px]">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="login">Login</TabsTrigger>
           <TabsTrigger value="signup">Signup</TabsTrigger>
@@ -33,7 +32,7 @@ function Auth() {
           <Login />
         </TabsContent>
         <TabsContent value="signup">
-          <Signup onTabChange={setActiveTab} />
+          <Signup />
         </TabsContent>
       </Tabs>
     </div>
